@@ -28,7 +28,7 @@ def create_app(config: ServiceConfig | None = None, *, runner=None) -> FastAPI:
         if authorization != expected:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API token")
 
-    @app.get("/health", dependencies=[Depends(authorize)])
+    @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
