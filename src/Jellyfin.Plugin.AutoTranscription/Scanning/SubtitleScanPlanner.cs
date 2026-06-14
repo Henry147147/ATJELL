@@ -2,15 +2,22 @@ namespace Jellyfin.Plugin.AutoTranscription.Scanning;
 
 public static class SubtitleScanPlanner
 {
+    public static IReadOnlyList<string> PresentLanguages(MediaItemSnapshot item, bool treatEmbeddedAsPresent)
+    {
+        return item.SubtitleStreams
+            .Where(stream => stream.IsExternal || treatEmbeddedAsPresent)
+            .Select(stream => NormalizeLanguage(stream.Language))
+            .Where(language => language.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     public static SubtitleGenerationPlan Plan(
         MediaItemSnapshot item,
         IReadOnlyList<string> targetLanguages,
         bool treatEmbeddedAsPresent)
     {
-        var present = item.SubtitleStreams
-            .Where(stream => stream.IsExternal || treatEmbeddedAsPresent)
-            .Select(stream => NormalizeLanguage(stream.Language))
-            .Where(language => language.Length > 0)
+        var present = PresentLanguages(item, treatEmbeddedAsPresent)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var missing = targetLanguages
