@@ -29,26 +29,35 @@ public sealed class SubtitleScanTaskRunner(
         }
 
         var targets = configuration.GetTargetLanguages();
+        var maxSubmittedJobs = Math.Max(1, configuration.MaxSubmittedJobs);
+        var pendingJobs = new List<(Guid ItemId, CreateSubtitleJobRequest Request)>();
         for (var index = 0; index < items.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var item = items[index];
             var plan = SubtitleScanPlanner.Plan(item, targets, configuration.TreatEmbeddedSubtitlesAsPresent);
-            if (plan.NeedsGeneration && !configuration.DryRun)
+            if (plan.NeedsGeneration && !configuration.DryRun && pendingJobs.Count < maxSubmittedJobs)
             {
-                var response = await client.SubmitJobAsync(
-                    new CreateSubtitleJobRequest(
-                        plan.MediaPath,
-                        plan.MissingLanguages,
-                        SubtitleScanPlanner.PresentLanguages(item, configuration.TreatEmbeddedSubtitlesAsPresent)),
-                    cancellationToken).ConfigureAwait(false);
-                if (string.Equals(response.State, "completed", StringComparison.OrdinalIgnoreCase))
-                {
-                    await refresher.RefreshAsync(item.Id, cancellationToken).ConfigureAwait(false);
-                }
+                pendingJobs.Add(
+                    (
+                        item.Id,
+                        new CreateSubtitleJobRequest(
+                            plan.MediaPath,
+                            plan.MissingLanguages,
+                            SubtitleScanPlanner.PresentLanguages(item, configuration.TreatEmbeddedSubtitlesAsPresent))));
             }
 
             progress.Report(((index + 1) / (double)items.Count) * 100);
         }
+
+        var submissions = pendingJobs.Select(async pendingJob =>
+        {
+            var response = await client.SubmitJobAsync(pendingJob.Request, cancellationToken).ConfigureAwait(false);
+            if (string.Equals(response.State, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                await refresher.RefreshAsync(pendingJob.ItemId, cancellationToken).ConfigureAwait(false);
+            }
+        });
+        await Task.WhenAll(submissions).ConfigureAwait(false);
     }
 }

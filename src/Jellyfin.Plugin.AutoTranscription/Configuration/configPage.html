@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Auto Transcription</title>
+</head>
+<body>
+    <div id="AutoTranscriptionConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox">
+        <div data-role="content">
+            <div class="content-primary">
+                <form id="AutoTranscriptionConfigForm">
+                    <div class="verticalSection verticalSection-extrabottompadding">
+                        <h2 class="sectionTitle">Auto Transcription</h2>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AutoTranscriptionServiceUrl">ASR service URL</label>
+                            <input id="AutoTranscriptionServiceUrl" name="ServiceUrl" type="url" is="emby-input" required />
+                            <div class="fieldDescription">Container default: http://asub-api:8765</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AutoTranscriptionApiToken">API token</label>
+                            <input id="AutoTranscriptionApiToken" name="ApiToken" type="password" is="emby-input" autocomplete="new-password" />
+                            <div class="fieldDescription">Must match ASUB_API_TOKEN when the service token is set.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AutoTranscriptionTargetLanguages">Target languages</label>
+                            <input id="AutoTranscriptionTargetLanguages" name="TargetLanguages" type="text" is="emby-input" required />
+                            <div class="fieldDescription">Comma-separated ISO language codes, for example: en,es.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AutoTranscriptionSubtitleFormats">Subtitle formats</label>
+                            <input id="AutoTranscriptionSubtitleFormats" name="SubtitleFormats" type="text" is="emby-input" required />
+                            <div class="fieldDescription">Comma-separated formats. The service currently defaults to srt.</div>
+                        </div>
+
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="AutoTranscriptionMaxSubmittedJobs">Maximum jobs per scan</label>
+                            <input id="AutoTranscriptionMaxSubmittedJobs" name="MaxSubmittedJobs" type="number" min="1" step="1" is="emby-input" required />
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input id="AutoTranscriptionTreatEmbeddedSubtitlesAsPresent" name="TreatEmbeddedSubtitlesAsPresent" type="checkbox" is="emby-checkbox" />
+                                <span>Treat embedded subtitles as present</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">When enabled, embedded tracks prevent generating a sidecar in the same language.</div>
+                        </div>
+
+                        <div class="checkboxContainer checkboxContainer-withDescription">
+                            <label>
+                                <input id="AutoTranscriptionDryRun" name="DryRun" type="checkbox" is="emby-checkbox" />
+                                <span>Dry run</span>
+                            </label>
+                            <div class="fieldDescription checkboxFieldDescription">Scan the library without submitting generation jobs.</div>
+                        </div>
+
+                        <div>
+                            <button is="emby-button" type="submit" class="raised button-submit block emby-button">
+                                <span>Save</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            var AutoTranscriptionConfig = {
+                pluginUniqueId: '8b4c0a75-16a4-40f7-a874-d8620cce28f3'
+            };
+
+            function autoTranscriptionValue(selector) {
+                return document.querySelector(selector).value;
+            }
+
+            function autoTranscriptionChecked(selector) {
+                return document.querySelector(selector).checked;
+            }
+
+            document.querySelector('#AutoTranscriptionConfigPage')
+                .addEventListener('pageshow', function() {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(AutoTranscriptionConfig.pluginUniqueId).then(function(config) {
+                        document.querySelector('#AutoTranscriptionServiceUrl').value = config.ServiceUrl || 'http://asub-api:8765';
+                        document.querySelector('#AutoTranscriptionApiToken').value = config.ApiToken || '';
+                        document.querySelector('#AutoTranscriptionTargetLanguages').value = config.TargetLanguages || 'en,es';
+                        document.querySelector('#AutoTranscriptionSubtitleFormats').value = config.SubtitleFormats || 'srt';
+                        document.querySelector('#AutoTranscriptionMaxSubmittedJobs').value = config.MaxSubmittedJobs || 2;
+                        document.querySelector('#AutoTranscriptionTreatEmbeddedSubtitlesAsPresent').checked = config.TreatEmbeddedSubtitlesAsPresent !== false;
+                        document.querySelector('#AutoTranscriptionDryRun').checked = config.DryRun === true;
+                        Dashboard.hideLoadingMsg();
+                    });
+                });
+
+            document.querySelector('#AutoTranscriptionConfigForm')
+                .addEventListener('submit', function(e) {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(AutoTranscriptionConfig.pluginUniqueId).then(function(config) {
+                        config.ServiceUrl = autoTranscriptionValue('#AutoTranscriptionServiceUrl');
+                        config.ApiToken = autoTranscriptionValue('#AutoTranscriptionApiToken');
+                        config.TargetLanguages = autoTranscriptionValue('#AutoTranscriptionTargetLanguages');
+                        config.SubtitleFormats = autoTranscriptionValue('#AutoTranscriptionSubtitleFormats');
+                        config.MaxSubmittedJobs = Math.max(1, parseInt(autoTranscriptionValue('#AutoTranscriptionMaxSubmittedJobs'), 10) || 1);
+                        config.TreatEmbeddedSubtitlesAsPresent = autoTranscriptionChecked('#AutoTranscriptionTreatEmbeddedSubtitlesAsPresent');
+                        config.DryRun = autoTranscriptionChecked('#AutoTranscriptionDryRun');
+                        ApiClient.updatePluginConfiguration(AutoTranscriptionConfig.pluginUniqueId, config).then(function(result) {
+                            Dashboard.processPluginConfigurationUpdateResult(result);
+                        });
+                    });
+
+                    e.preventDefault();
+                    return false;
+                });
+        </script>
+    </div>
+</body>
+</html>
