@@ -35,10 +35,25 @@ def test_api_accepts_job_and_returns_completed_status(tmp_path):
     assert status.json()["outputs"] == [str(media.with_suffix(".en.srt"))]
 
 
-def test_api_rejects_invalid_token(tmp_path):
+def test_health_does_not_require_token():
     app = create_app(ServiceConfig(api_token="secret"), runner=FakeRunner())
     client = TestClient(app)
 
-    response = client.get("/health", headers={"Authorization": "Bearer wrong"})
+    response = client.get("/health")
+
+    assert response.status_code == 200
+
+
+def test_api_rejects_invalid_token(tmp_path):
+    media = tmp_path / "Movie.mkv"
+    media.write_text("media", encoding="utf-8")
+    app = create_app(ServiceConfig(api_token="secret"), runner=FakeRunner())
+    client = TestClient(app)
+
+    response = client.post(
+        "/v1/jobs",
+        headers={"Authorization": "Bearer wrong"},
+        json={"media_path": str(media), "target_languages": ["en"], "existing_languages": []},
+    )
 
     assert response.status_code == 401
