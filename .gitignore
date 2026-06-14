@@ -1,0 +1,8 @@
+.venv/
+.pytest_cache/
+*.egg-info/
+**/__pycache__/
+**/bin/
+**/obj/
+asub/asub-output*/
+asub/.asub-env
