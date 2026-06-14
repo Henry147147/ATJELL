@@ -48,6 +48,53 @@ public sealed class SubtitleScanTaskRunnerTests
         Assert.Empty(refresher.Refreshed);
     }
 
+    [Fact]
+    public async Task RunnerHonorsMaxSubmittedJobsPerRun()
+    {
+        var items = Enumerable.Range(0, 3)
+            .Select(index => new MediaItemSnapshot(Guid.NewGuid(), $"/media/{index}.mkv", []))
+            .ToArray();
+        var client = new FakeClient();
+        var refresher = new FakeRefresher();
+        var runner = new SubtitleScanTaskRunner(
+            new FakeScanner(items),
+            client,
+            refresher,
+            new PluginConfiguration
+            {
+                TargetLanguages = "en",
+                MaxSubmittedJobs = 2
+            });
+
+        await runner.RunAsync(new Progress<double>(), CancellationToken.None);
+
+        Assert.Equal(2, client.Requests.Count);
+        Assert.Equal(2, refresher.Refreshed.Count);
+        Assert.Equal(new[] { "/media/0.mkv", "/media/1.mkv" }, client.Requests.Select(request => request.MediaPath));
+    }
+
+    [Fact]
+    public async Task RunnerSubmitsConfiguredBatchConcurrently()
+    {
+        var items = Enumerable.Range(0, 2)
+            .Select(index => new MediaItemSnapshot(Guid.NewGuid(), $"/media/{index}.mkv", []))
+            .ToArray();
+        var client = new CoordinatedClient(expectedConcurrentCalls: 2);
+        var runner = new SubtitleScanTaskRunner(
+            new FakeScanner(items),
+            client,
+            new FakeRefresher(),
+            new PluginConfiguration
+            {
+                TargetLanguages = "en",
+                MaxSubmittedJobs = 2
+            });
+
+        await runner.RunAsync(new Progress<double>(), CancellationToken.None);
+
+        Assert.Equal(2, client.MaxActiveCalls);
+    }
+
     private sealed class FakeScanner(params MediaItemSnapshot[] items) : ILibrarySubtitleScanner
     {
         public Task<IReadOnlyList<MediaItemSnapshot>> GetVideoItemsAsync(CancellationToken cancellationToken)
@@ -75,6 +122,37 @@ public sealed class SubtitleScanTaskRunnerTests
         {
             Refreshed.Add(itemId);
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class CoordinatedClient(int expectedConcurrentCalls) : IAsubServiceClient
+    {
+        private readonly object _sync = new();
+        private readonly TaskCompletionSource _allCallsActive = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _activeCalls;
+
+        public int MaxActiveCalls { get; private set; }
+
+        public async Task<SubtitleJobResponse> SubmitJobAsync(CreateSubtitleJobRequest request, CancellationToken cancellationToken)
+        {
+            lock (_sync)
+            {
+                _activeCalls++;
+                MaxActiveCalls = Math.Max(MaxActiveCalls, _activeCalls);
+                if (_activeCalls == expectedConcurrentCalls)
+                {
+                    _allCallsActive.TrySetResult();
+                }
+            }
+
+            await _allCallsActive.Task.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+
+            lock (_sync)
+            {
+                _activeCalls--;
+            }
+
+            return new SubtitleJobResponse("job", "completed", ["/media/out.srt"], null);
         }
     }
 }

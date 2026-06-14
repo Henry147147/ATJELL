@@ -47,6 +47,16 @@ class SubtitleJobQueue:
         self._runner = runner
         self._jobs: dict[str, JobRecord] = {}
         self._active_by_media: dict[Path, str] = {}
+        self._run_semaphore = asyncio.Semaphore(
+            max(
+                1,
+                config.max_concurrent_asr,
+                config.max_concurrent_alignment,
+                config.max_concurrent_translation,
+            )
+        )
+        self._unload_lock = asyncio.Lock()
+        self._unloaded_after_idle = False
 
     def enqueue(self, request: JobRequest) -> JobRecord:
         media_path = request.media_path.resolve(strict=False)
@@ -57,6 +67,7 @@ class SubtitleJobQueue:
         record = JobRecord(id=str(uuid.uuid4()), request=normalized)
         self._jobs[record.id] = record
         self._active_by_media[media_path] = record.id
+        self._unloaded_after_idle = False
         return record
 
     def status(self, job_id: str) -> JobRecord:
@@ -71,15 +82,26 @@ class SubtitleJobQueue:
                 continue
             record.state = JobStatus.RUNNING
             try:
-                record.outputs = await self._runner.run(record.request, self._config)
+                async with self._run_semaphore:
+                    record.outputs = await self._runner.run(record.request, self._config)
                 record.state = JobStatus.COMPLETED
             except Exception as exc:
                 record.error = str(exc)
                 record.state = JobStatus.FAILED
             finally:
                 self._active_by_media.pop(record.request.media_path, None)
-        if self._config.unload_on_idle:
+        await self._unload_when_idle()
+
+    async def _unload_when_idle(self) -> None:
+        if not self._config.unload_on_idle:
+            return
+        async with self._unload_lock:
+            if self._unloaded_after_idle:
+                return
+            if any(record.state in {JobStatus.QUEUED, JobStatus.RUNNING} for record in self._jobs.values()):
+                return
             await self._runner.unload()
+            self._unloaded_after_idle = True
 
     def run_until_idle(self) -> None:
         asyncio.run(self.drain())
