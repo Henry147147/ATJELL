@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asub"
+version = "0.1.0"
+description = "Local Linux video captioning, translation, subtitle remuxing, and optional burn-in tool."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "typer>=0.12",
+  "rich>=13",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.7"]
+qwen-asr = ["torch", "qwen-asr[vllm]"]
+mt = ["torch", "transformers==4.56.0", "accelerate"]
+align = ["torch", "qwen-asr"]
+test = ["pytest>=8"]
+
+[project.scripts]
+asub = "asub.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
