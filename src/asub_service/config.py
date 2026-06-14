@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from asub.languages import parse_targets
 
@@ -42,6 +43,7 @@ class ServiceConfig:
     max_concurrent_translation: int = 2
     unload_on_idle: bool = True
     api_token: str = ""
+    work_dir: Path = Path("/tmp/asub-jobs")
 
     @classmethod
     def from_env(cls) -> "ServiceConfig":
@@ -74,4 +76,5 @@ class ServiceConfig:
             max_concurrent_translation=translation_concurrency,
             unload_on_idle=_bool_env("ASUB_UNLOAD_ON_IDLE", True),
             api_token=os.environ.get("ASUB_API_TOKEN", ""),
+            work_dir=Path(os.environ.get("ASUB_WORK_DIR", "/tmp/asub-jobs")),
         )
